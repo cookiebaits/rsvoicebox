@@ -5,6 +5,16 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Voicebox Clone (Chatterbox Turbo)</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* Indeterminate loading animation for generation phase */
+        @keyframes loading-slide {
+            0% { transform: translateX(-100%); }
+            100% { transform: translateX(300%); }
+        }
+        .animate-loading-slide {
+            animation: loading-slide 1.5s infinite linear;
+        }
+    </style>
 </head>
 <body class="bg-gray-900 text-white min-h-screen font-sans flex flex-col items-center p-8">
     
@@ -12,16 +22,36 @@
         <h1 class="text-3xl font-bold mb-2">Voicebox web</h1>
         <p class="text-gray-400 mb-8">100% In-Browser Voice Cloning using Chatterbox Turbo & WebGPU.</p>
 
-        <div class="mb-6">
-            <h2 class="text-xl font-semibold mb-3">1. Clone a Voice</h2>
-            <p class="text-sm text-gray-400 mb-3">Record 5-10 seconds of clear speech for the model to clone.</p>
-            <div class="flex gap-4">
-                <button id="recordBtn" class="bg-blue-600 hover:bg-blue-500 px-6 py-2 rounded-lg font-medium transition-colors">
-                    Start Recording
-                </button>
-                <button id="playRefBtn" disabled class="bg-gray-700 disabled:opacity-50 px-6 py-2 rounded-lg transition-colors">
-                    Play Reference
-                </button>
+        <div class="mb-6 space-y-4">
+            <h2 class="text-xl font-semibold">1. Choose or Clone a Voice</h2>
+            
+            <!-- Sample Voices Dropdown -->
+            <div class="bg-gray-700 p-4 rounded-lg">
+                <label class="block text-sm text-gray-300 mb-2">Select a pre-loaded sample voice:</label>
+                <select id="sampleSelect" class="w-full bg-gray-600 text-white p-2 rounded-lg outline-none focus:ring-2 focus:ring-blue-500">
+                    <option value="">-- Choose a sample --</option>
+                    <option value="samples/voice1.wav">Sample Voice 1</option>
+                    <option value="samples/voice2.wav">Sample Voice 2</option>
+                    <option value="samples/voice3.wav">Sample Voice 3</option>
+                    <option value="samples/voice4.wav">Sample Voice 4</option>
+                    <option value="samples/voice5.wav">Sample Voice 5</option>
+                    <option value="samples/voice6.wav">Sample Voice 6</option>
+                </select>
+            </div>
+
+            <div class="text-center text-gray-400 font-bold">OR</div>
+
+            <!-- Record Your Own Voice -->
+            <div class="bg-gray-700 p-4 rounded-lg">
+                <p class="text-sm text-gray-300 mb-3">Record 5-10 seconds of clear speech for the model to clone.</p>
+                <div class="flex gap-4">
+                    <button id="recordBtn" class="bg-blue-600 hover:bg-blue-500 px-6 py-2 rounded-lg font-medium transition-colors">
+                        Start Recording
+                    </button>
+                    <button id="playRefBtn" disabled class="bg-gray-600 disabled:opacity-50 px-6 py-2 rounded-lg transition-colors">
+                        Play Recorded Reference
+                    </button>
+                </div>
             </div>
         </div>
 
@@ -37,7 +67,18 @@
         </div>
 
         <div class="border-t border-gray-700 pt-6">
-            <p id="status" class="text-sm text-blue-400 mb-4 font-mono">Initializing Web Worker...</p>
+            <p id="status" class="text-sm text-blue-400 mb-2 font-mono">Initializing Web Worker...</p>
+            
+            <!-- Progress Bar for downloading the model -->
+            <div id="progressContainer" class="hidden w-full bg-gray-700 rounded-full h-2 mb-4">
+                <div id="progressBar" class="bg-blue-500 h-2 rounded-full transition-all duration-300" style="width: 0%"></div>
+            </div>
+
+            <!-- Animated Loading Bar for generation process -->
+            <div id="loadingContainer" class="hidden w-full bg-gray-700 rounded-full h-2 mb-4 overflow-hidden relative">
+                <div class="absolute top-0 left-0 h-full bg-green-500 w-1/3 rounded-full animate-loading-slide"></div>
+            </div>
+
             <audio id="outputAudio" controls class="w-full hidden"></audio>
         </div>
     </main>
