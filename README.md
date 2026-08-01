@@ -1,6 +1,6 @@
 # 🎙️ Ruinscams Voice Clone
 
-[![Live Demo](https://img.shields.io/badge/Live_Demo-Play_Now-success?style=for-the-badge)](https://<your-username>.github.io/<repository-name>/)
+[![Live Demo](https://img.shields.io/badge/Live_Demo-Play_Now-success?style=for-the-badge)](https://cookiebaits.github.io/rsvoicebox/)
 
 Ruinscams Voice Clone is a 100% browser-based, zero-shot voice cloning web application. Inspired by Jamie Pine's Voicebox, this project allows you to record a few seconds of your voice and generate highly expressive, synthesized speech from text—all without a backend server. 
 
@@ -12,19 +12,16 @@ This project leverages **Chatterbox Turbo** (a 350M parameter model by Resemble 
 * **Highly Expressive:** Supports paralinguistic tags in your text prompts (e.g., `[laugh]`, `[sigh]`, `[cough]`).
 * **100% Client-Side:** No servers, no backend APIs, and no subscriptions. All processing happens locally on your device.
 * **Privacy-First:** Your voice recordings never leave your browser.
-* **GitHub Pages Ready:** Since it's purely HTML/JS, it can be hosted anywhere for free.
+* **GitHub Pages Ready:** Since it's purely HTML/JS, it runs seamlessly on GitHub Pages.
 
 ## 🚀 How to Deploy (GitHub Pages)
 
-Hosting this project is incredibly simple because it requires no backend.
+Hosting this project is incredibly simple because it requires no backend. Since your repository is already set up at `cookiebaits/rsvoicebox`, follow these steps to turn it live:
 
-1. Create a new repository on GitHub.
-2. Upload the `index.html`, `app.js`, and `worker.js` files to your repository.
-3. Go to your repository's **Settings** > **Pages**.
-4. Under the **Build and deployment** section, select **Deploy from a branch**.
-5. Choose the `main` branch and `/ (root)` folder, then click **Save**.
-6. Wait a minute or two, and GitHub will provide you with a live URL! 
-7. **Update this README:** Replace `https://<your-username>.github.io/<repository-name>/` at the top of this file with your newly generated GitHub Pages link.
+1. Go to your repository's **Settings** > **Pages**.
+2. Under the **Build and deployment** section, select **Deploy from a branch**.
+3. Choose the `main` branch and `/ (root)` folder, then click **Save**.
+4. Wait a minute or two, and your application will be fully live at `https://cookiebaits.github.io/rsvoicebox/`!
 
 ## 📖 How to Use
 
