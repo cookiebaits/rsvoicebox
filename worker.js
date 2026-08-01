@@ -1,30 +1,34 @@
 import { pipeline, env } from 'https://cdn.jsdelivr.net/npm/@huggingface/transformers';
 
-// Tell transformers to skip local files and pull directly from Hugging Face hub
 env.allowLocalModels = false;
-
 let synthesizer = null;
 
 async function loadModel() {
     postMessage({ 
-        status: 'progress', 
-        message: 'Loading Chatterbox Turbo model (~1.5GB). This takes a while on the first visit, but caches locally!' 
+        status: 'download_progress', 
+        message: 'Initializing...',
+        progress: 0
     });
     
     try {
-        // Initialize the WebGPU pipeline with Chatterbox Turbo
+        // Explicitly ensuring Chatterbox Turbo is the model used
         synthesizer = await pipeline('text-to-speech', 'ResembleAI/chatterbox-turbo', {
-            device: 'webgpu', // Utilizes the browser's WebGPU engine for lightning-fast speeds
+            device: 'webgpu', 
             progress_callback: (info) => {
                 if (info.status === 'progress') {
-                    postMessage({ status: 'progress', message: `Downloading model weights: ${Math.round(info.progress)}%` });
+                    // Send download percentage back to UI progress bar
+                    postMessage({ 
+                        status: 'download_progress', 
+                        message: `Downloading Chatterbox Turbo weights: ${Math.round(info.progress)}%`,
+                        progress: info.progress
+                    });
                 }
             }
         });
         
         postMessage({ status: 'ready' });
     } catch(err) {
-        postMessage({ status: 'progress', message: `Error loading model: ${err.message}. Ensure your browser supports WebGPU.` });
+        postMessage({ status: 'ready', message: `Error loading model: ${err.message}` });
     }
 }
 
@@ -32,15 +36,14 @@ loadModel();
 
 onmessage = async (e) => {
     if (!synthesizer) return;
-    
     const { text, referenceAudio } = e.data;
     
     try {
-        postMessage({ status: 'progress', message: 'Synthesizing speech via WebGPU...' });
+        // Trigger the indeterminate loading animation in the UI
+        postMessage({ status: 'generating', message: 'Converting text to speech using Chatterbox Turbo...' });
         
-        // Execute zero-shot generation
         const result = await synthesizer(text, {
-            speaker_audio: referenceAudio // Provide the Float32Array of the recorded voice to clone
+            speaker_audio: referenceAudio
         });
         
         postMessage({
@@ -49,6 +52,6 @@ onmessage = async (e) => {
             sampleRate: result.sampling_rate
         });
     } catch (err) {
-        postMessage({ status: 'progress', message: `Generation failed: ${err.message}` });
+        postMessage({ status: 'ready', message: `Generation failed: ${err.message}` });
     }
 };
