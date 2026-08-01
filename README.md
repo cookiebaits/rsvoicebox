@@ -1,5 +1,7 @@
 # 🎙️ Ruinscams Voice Clone
 
+[![Live Demo](https://img.shields.io/badge/Live_Demo-Play_Now-success?style=for-the-badge)](https://<your-username>.github.io/<repository-name>/)
+
 Ruinscams Voice Clone is a 100% browser-based, zero-shot voice cloning web application. Inspired by Jamie Pine's Voicebox, this project allows you to record a few seconds of your voice and generate highly expressive, synthesized speech from text—all without a backend server. 
 
 This project leverages **Chatterbox Turbo** (a 350M parameter model by Resemble AI) running entirely on the client side using **Transformers.js** and **WebGPU**. 
@@ -21,7 +23,8 @@ Hosting this project is incredibly simple because it requires no backend.
 3. Go to your repository's **Settings** > **Pages**.
 4. Under the **Build and deployment** section, select **Deploy from a branch**.
 5. Choose the `main` branch and `/ (root)` folder, then click **Save**.
-6. Wait a minute or two, and GitHub will provide you with a live URL to access Ruinscams Voice Clone!
+6. Wait a minute or two, and GitHub will provide you with a live URL! 
+7. **Update this README:** Replace `https://<your-username>.github.io/<repository-name>/` at the top of this file with your newly generated GitHub Pages link.
 
 ## 📖 How to Use
 
