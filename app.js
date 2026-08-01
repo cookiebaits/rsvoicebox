@@ -7,40 +7,53 @@ const statusText = document.getElementById('status');
 const outputAudio = document.getElementById('outputAudio');
 const progressContainer = document.getElementById('progressContainer');
 const progressBar = document.getElementById('progressBar');
-const loadingContainer = document.getElementById('loadingContainer');
+const executionProgressContainer = document.getElementById('executionProgressContainer');
+const executionProgressBar = document.getElementById('executionProgressBar');
+const executionProgressText = document.getElementById('executionProgressText');
 
 let mediaRecorder;
 let audioChunks = [];
 let referenceAudioFloat32 = null;
 let referenceAudioUrl = null;
+let isModelReady = false;
 
 const worker = new Worker('worker.js', { type: 'module' });
+
+// Check if Generate button should be enabled
+function updateGenerateButton() {
+    if (isModelReady && referenceAudioFloat32 && textInput.value.trim().length > 0) {
+        generateBtn.disabled = false;
+        generateBtn.innerText = "Generate Speech";
+    } else {
+        generateBtn.disabled = true;
+    }
+}
+
+textInput.addEventListener('input', updateGenerateButton);
 
 // Handle Sample Voice Selection
 sampleSelect.onchange = async (e) => {
     const url = e.target.value;
-    if (!url) return;
+    if (!url) {
+        referenceAudioFloat32 = null;
+        updateGenerateButton();
+        return;
+    }
     
     statusText.innerText = "Loading sample voice...";
-    generateBtn.disabled = true;
-
     try {
         const response = await fetch(url);
         const arrayBuffer = await response.arrayBuffer();
         
-        // Chatterbox Turbo requires 24kHz audio format natively
         const audioCtx = new AudioContext({ sampleRate: 24000 });
         const decodedData = await audioCtx.decodeAudioData(arrayBuffer);
         
         referenceAudioFloat32 = decodedData.getChannelData(0); 
-        
         statusText.innerText = "Sample voice loaded! Ready to generate.";
-        generateBtn.disabled = false;
-        
-        // Disable play recording button since a sample is being used
         playRefBtn.disabled = true; 
+        updateGenerateButton();
     } catch (err) {
-        statusText.innerText = "Error loading sample. Ensure the file exists in your repository.";
+        statusText.innerText = "Error loading sample. Ensure the file exists.";
     }
 };
 
@@ -68,9 +81,9 @@ recordBtn.onclick = async () => {
             referenceAudioFloat32 = decodedData.getChannelData(0); 
             
             playRefBtn.disabled = false;
-            generateBtn.disabled = false;
-            sampleSelect.value = ""; // Reset dropdown if user records voice
+            sampleSelect.value = ""; 
             statusText.innerText = "Voice captured successfully! Ready to generate.";
+            updateGenerateButton();
         };
         
         mediaRecorder.start();
@@ -92,23 +105,43 @@ worker.onmessage = (e) => {
         statusText.innerText = message;
         progressContainer.classList.remove('hidden');
         progressBar.style.width = `${progress}%`;
-    } else if (status === 'ready') {
+    } 
+    else if (status === 'compiling') {
         progressContainer.classList.add('hidden');
-        statusText.innerText = "Model loaded. Waiting for voice clone.";
-    } else if (status === 'generating') {
         statusText.innerText = message;
-        loadingContainer.classList.remove('hidden'); // Show animated loading bar
-    } else if (status === 'complete') {
-        loadingContainer.classList.add('hidden'); // Hide animated loading bar
-        statusText.innerText = "Generation complete!";
+        generateBtn.innerText = "Optimizing Shaders...";
+    }
+    else if (status === 'ready') {
+        isModelReady = true;
+        statusText.innerText = "Model loaded and cached. Ready for cloning.";
+        updateGenerateButton();
+    } 
+    else if (status === 'generation_progress') {
+        statusText.innerText = message;
+        executionProgressContainer.classList.remove('hidden');
+        executionProgressBar.style.width = `${progress}%`;
+        executionProgressText.innerText = `${progress}%`;
+    } 
+    else if (status === 'complete') {
+        executionProgressBar.style.width = `100%`;
+        executionProgressText.innerText = `100%`;
+        
+        setTimeout(() => {
+            executionProgressContainer.classList.add('hidden');
+            statusText.innerText = "Generation complete!";
+        }, 1000);
         
         const wavBlob = encodeWAV(audio, sampleRate);
         outputAudio.src = URL.createObjectURL(wavBlob);
         outputAudio.style.display = 'block';
         outputAudio.play();
         
-        generateBtn.disabled = false;
-        generateBtn.innerText = "Generate Speech";
+        updateGenerateButton();
+    }
+    else if (status === 'error') {
+        statusText.innerText = `Error: ${message}`;
+        executionProgressContainer.classList.add('hidden');
+        updateGenerateButton();
     }
 };
 
@@ -120,6 +153,10 @@ generateBtn.onclick = () => {
     generateBtn.disabled = true;
     generateBtn.innerText = "Generating...";
     outputAudio.style.display = 'none';
+    
+    executionProgressContainer.classList.remove('hidden');
+    executionProgressBar.style.width = `0%`;
+    executionProgressText.innerText = `0%`;
     
     worker.postMessage({
         text,
