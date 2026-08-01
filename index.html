@@ -1,75 +1,89 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Voicebox Clone (Chatterbox Turbo)</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-</head>
-<body class="bg-gray-900 text-white min-h-screen font-sans flex flex-col items-center p-8">
+import { pipeline, env } from 'https://cdn.jsdelivr.net/npm/@huggingface/transformers';
+
+// Explicitly enable caching to store the compressed model in browser memory permanently
+env.use_cache = true; 
+env.allowLocalModels = false;
+
+let synthesizer = null;
+
+async function loadModel() {
+    postMessage({ 
+        status: 'download_progress', 
+        message: 'Initializing and checking cache...',
+        progress: 0
+    });
     
-    <main class="max-w-2xl w-full bg-gray-800 p-8 rounded-xl shadow-2xl">
-        <h1 class="text-3xl font-bold mb-2">Voicebox web</h1>
-        <p class="text-gray-400 mb-8">100% In-Browser Voice Cloning using Chatterbox Turbo & WebGPU.</p>
+    try {
+        // We use 'q8' (8-bit quantization) to make the model massively lighter and faster
+        // without sacrificing the high quality of Chatterbox Turbo.
+        synthesizer = await pipeline('text-to-speech', 'ResembleAI/chatterbox-turbo', {
+            device: 'webgpu',
+            dtype: 'q8', // <--- THE MAGIC FIX: Shrinks model from 1.5GB to ~350MB
+            progress_callback: (info) => {
+                if (info.status === 'progress') {
+                    postMessage({ 
+                        status: 'download_progress', 
+                        message: `Downloading/Loading Chatterbox Turbo (Fast q8 Mode): ${Math.round(info.progress)}%`,
+                        progress: info.progress
+                    });
+                }
+            }
+        });
+        
+        // --- THE WARM-UP PHASE ---
+        // We run a tiny invisible generation right now.
+        // This forces WebGPU to compile its shaders while the user is still typing, 
+        // preventing the app from freezing when they actually click "Generate Speech".
+        postMessage({ 
+            status: 'compiling', 
+            message: 'Optimizing and compiling WebGPU Shaders (This takes 15-30 seconds on first run)...' 
+        });
+        
+        const dummyAudio = new Float32Array(24000); // 1 second of silence
+        await synthesizer("a", { speaker_audio: dummyAudio }); // Silent compile trigger
+        
+        postMessage({ status: 'ready' });
+    } catch(err) {
+        postMessage({ status: 'error', message: `Error loading model: ${err.message}` });
+    }
+}
 
-        <div class="mb-6 space-y-4">
-            <h2 class="text-xl font-semibold">1. Choose or Clone a Voice</h2>
-            
-            <div class="bg-gray-700 p-4 rounded-lg">
-                <label class="block text-sm text-gray-300 mb-2">Select a pre-loaded sample voice:</label>
-                <select id="sampleSelect" class="w-full bg-gray-600 text-white p-2 rounded-lg outline-none focus:ring-2 focus:ring-blue-500">
-                    <option value="">-- Choose a sample --</option>
-                    <option value="samples/BushSample.mp3">George W. Bush</option>
-                    <option value="samples/ObamaSample.mp3">Barack Obama</option>
-                    <option value="samples/TrumpSample.mp3">Donald Trump</option>
-                </select>
-            </div>
+loadModel();
 
-            <div class="text-center text-gray-400 font-bold">OR</div>
+onmessage = async (e) => {
+    if (!synthesizer) return;
+    const { text, referenceAudio } = e.data;
+    
+    try {
+        postMessage({ status: 'generation_progress', message: 'Starting generation engine...', progress: 5 });
+        
+        // Rough estimate to calculate a percentage based on characters/tokens
+        const estimatedMaxSteps = Math.max(10, Math.floor(text.length * 1.5));
+        let currentStep = 0;
 
-            <div class="bg-gray-700 p-4 rounded-lg">
-                <p class="text-sm text-gray-300 mb-3">Record 5-10 seconds of clear speech for the model to clone.</p>
-                <div class="flex gap-4">
-                    <button id="recordBtn" class="bg-blue-600 hover:bg-blue-500 px-6 py-2 rounded-lg font-medium transition-colors">
-                        Start Recording
-                    </button>
-                    <button id="playRefBtn" disabled class="bg-gray-600 disabled:opacity-50 px-6 py-2 rounded-lg transition-colors">
-                        Play Recorded Reference
-                    </button>
-                </div>
-            </div>
-        </div>
-
-        <div class="mb-6">
-            <h2 class="text-xl font-semibold mb-3">2. Generate Speech</h2>
-            <textarea id="textInput" rows="4" 
-                class="w-full bg-gray-700 text-white p-4 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none resize-none mb-3"
-                placeholder="Type what you want to hear. Try adding tags like [laugh], [sigh], or [cough]!"></textarea>
-            
-            <button id="generateBtn" disabled class="w-full bg-green-600 disabled:bg-gray-600 hover:bg-green-500 px-6 py-3 rounded-lg font-bold transition-colors">
-                Generate Speech (Waiting for Model...)
-            </button>
-        </div>
-
-        <div class="border-t border-gray-700 pt-6">
-            <h3 class="text-sm font-bold text-gray-400 mb-1 uppercase tracking-wider">System Status</h3>
-            <p id="status" class="text-sm text-blue-400 mb-4 font-mono">Initializing Web Worker...</p>
-            
-            <!-- Model Download Progress Bar -->
-            <div id="progressContainer" class="hidden w-full bg-gray-700 rounded-full h-2 mb-4">
-                <div id="progressBar" class="bg-blue-500 h-2 rounded-full transition-all duration-300" style="width: 0%"></div>
-            </div>
-
-            <!-- Execution/Generation Progress Bar -->
-            <div id="executionProgressContainer" class="hidden w-full bg-gray-700 rounded-full h-6 mb-4 relative overflow-hidden shadow-inner">
-                <div id="executionProgressBar" class="bg-green-500 h-6 rounded-full transition-all duration-200 ease-out" style="width: 0%"></div>
-                <span id="executionProgressText" class="absolute inset-0 flex items-center justify-center text-xs font-bold text-white drop-shadow-md">0%</span>
-            </div>
-
-            <audio id="outputAudio" controls class="w-full hidden mt-4"></audio>
-        </div>
-    </main>
-
-    <script type="module" src="app.js"></script>
-</body>
-</html>
+        const result = await synthesizer(text, {
+            speaker_audio: referenceAudio,
+            callback_function: (outputs) => {
+                // Fired token-by-token during inference
+                currentStep++;
+                
+                // Calculate pseudo-percentage. Cap at 95% until officially complete.
+                let percentage = Math.min(95, Math.round((currentStep / estimatedMaxSteps) * 100));
+                
+                postMessage({ 
+                    status: 'generation_progress', 
+                    message: `Synthesizing audio frame ${currentStep}...`,
+                    progress: percentage
+                });
+            }
+        });
+        
+        postMessage({
+            status: 'complete',
+            audio: result.audio,
+            sampleRate: result.sampling_rate
+        });
+    } catch (err) {
+        postMessage({ status: 'error', message: err.message });
+    }
+};
