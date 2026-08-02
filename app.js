@@ -10,12 +10,12 @@ const executionProgressBar = document.getElementById('executionProgressBar');
 const executionProgressText = document.getElementById('executionProgressText');
 
 let isModelReady = false;
-let selectedAudioUrl = null;
+let referenceAudioFloat32 = null;
 
 const worker = new Worker('worker.js', { type: 'module' });
 
 function updateGenerateButton() {
-    if (isModelReady && selectedAudioUrl && textInput.value.trim().length > 0) {
+    if (isModelReady && referenceAudioFloat32 && textInput.value.trim().length > 0) {
         generateBtn.disabled = false;
         generateBtn.innerText = "Generate Speech";
     } else {
@@ -25,10 +25,35 @@ function updateGenerateButton() {
 
 textInput.addEventListener('input', updateGenerateButton);
 
-// Dropdown simply saves the URL of the .bin file
-sampleSelect.onchange = (e) => {
-    selectedAudioUrl = e.target.value;
-    updateGenerateButton();
+// Decode the MP3 directly in the browser!
+sampleSelect.onchange = async (e) => {
+    const url = e.target.value;
+    if (!url) {
+        referenceAudioFloat32 = null;
+        updateGenerateButton();
+        return;
+    }
+    
+    statusText.innerText = "Loading MP3 voice sample...";
+    generateBtn.disabled = true;
+
+    try {
+        const response = await fetch(url);
+        if (!response.ok) throw new Error(`HTTP ${response.status}: Could not find ${url}`);
+        
+        const arrayBuffer = await response.arrayBuffer();
+        
+        // Chatterbox expects audio processed at exactly 24kHz
+        const audioCtx = new AudioContext({ sampleRate: 24000 });
+        const decodedData = await audioCtx.decodeAudioData(arrayBuffer);
+        
+        // Extract the raw audio floats
+        referenceAudioFloat32 = decodedData.getChannelData(0); 
+        statusText.innerText = "MP3 loaded successfully! Ready to clone.";
+        updateGenerateButton();
+    } catch (err) {
+        statusText.innerText = `Error: ${err.message}. Make sure your .mp3 is uploaded to the samples folder.`;
+    }
 };
 
 worker.onmessage = (e) => {
@@ -39,10 +64,14 @@ worker.onmessage = (e) => {
         progressContainer.classList.remove('hidden');
         progressBar.style.width = `${progress}%`;
     } 
-    else if (status === 'ready') {
+    else if (status === 'compiling') {
         progressContainer.classList.add('hidden');
+        statusText.innerText = message;
+        generateBtn.innerText = "Optimizing Shaders...";
+    }
+    else if (status === 'ready') {
         isModelReady = true;
-        statusText.innerText = "Model loaded and cached. Ready for cloning.";
+        statusText.innerText = "Model loaded. Ready for voice cloning.";
         updateGenerateButton();
     } 
     else if (status === 'generation_progress') {
@@ -76,7 +105,7 @@ worker.onmessage = (e) => {
 
 generateBtn.onclick = () => {
     const text = textInput.value.trim();
-    if (!text || !selectedAudioUrl) return;
+    if (!text || !referenceAudioFloat32) return;
     
     generateBtn.disabled = true;
     generateBtn.innerText = "Generating...";
@@ -88,10 +117,11 @@ generateBtn.onclick = () => {
     
     worker.postMessage({
         text,
-        referenceAudioUrl: selectedAudioUrl
+        referenceAudio: referenceAudioFloat32 // Pass the raw MP3 array straight to the AI
     });
 };
 
+// Utility function to convert raw PCM Float32Array to WAV format
 function encodeWAV(samples, sampleRate) {
     const buffer = new ArrayBuffer(44 + samples.length * 2);
     const view = new DataView(buffer);
