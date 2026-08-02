@@ -1,46 +1,32 @@
-import { pipeline, env } from 'https://cdn.jsdelivr.net/npm/@huggingface/transformers';
+import { pipeline, env, Tensor } from 'https://cdn.jsdelivr.net/npm/@huggingface/transformers';
 
-// Explicitly enable caching to store the compressed model in browser memory permanently
-env.use_cache = true; 
 env.allowLocalModels = false;
+env.use_cache = true; 
 
 let synthesizer = null;
 
 async function loadModel() {
     postMessage({ 
         status: 'download_progress', 
-        message: 'Initializing and checking cache...',
+        message: 'Initializing SpeechT5 WebGPU model...',
         progress: 0
     });
     
     try {
-        // We use 'q8' (8-bit quantization) to make the model massively lighter and faster
-        // without sacrificing the high quality of Chatterbox Turbo.
-        synthesizer = await pipeline('text-to-speech', 'ResembleAI/chatterbox-turbo', {
+        // Switching to the officially supported WebGPU TTS model
+        synthesizer = await pipeline('text-to-speech', 'Xenova/speecht5_tts', {
             device: 'webgpu',
-            dtype: 'q8', // <--- THE MAGIC FIX: Shrinks model from 1.5GB to ~350MB
+            dtype: 'fp32', 
             progress_callback: (info) => {
                 if (info.status === 'progress') {
                     postMessage({ 
                         status: 'download_progress', 
-                        message: `Downloading/Loading Chatterbox Turbo (Fast q8 Mode): ${Math.round(info.progress)}%`,
+                        message: `Downloading SpeechT5 Model: ${Math.round(info.progress)}%`,
                         progress: info.progress
                     });
                 }
             }
         });
-        
-        // --- THE WARM-UP PHASE ---
-        // We run a tiny invisible generation right now.
-        // This forces WebGPU to compile its shaders while the user is still typing, 
-        // preventing the app from freezing when they actually click "Generate Speech".
-        postMessage({ 
-            status: 'compiling', 
-            message: 'Optimizing and compiling WebGPU Shaders (This takes 15-30 seconds on first run)...' 
-        });
-        
-        const dummyAudio = new Float32Array(24000); // 1 second of silence
-        await synthesizer("a", { speaker_audio: dummyAudio }); // Silent compile trigger
         
         postMessage({ status: 'ready' });
     } catch(err) {
@@ -52,30 +38,27 @@ loadModel();
 
 onmessage = async (e) => {
     if (!synthesizer) return;
-    const { text, referenceAudio } = e.data;
+    const { text, referenceAudioUrl } = e.data;
     
     try {
-        postMessage({ status: 'generation_progress', message: 'Starting generation engine...', progress: 5 });
+        postMessage({ status: 'generation_progress', message: 'Fetching speaker profile...', progress: 10 });
         
-        // Rough estimate to calculate a percentage based on characters/tokens
-        const estimatedMaxSteps = Math.max(10, Math.floor(text.length * 1.5));
-        let currentStep = 0;
+        // 1. Fetch the .bin file from the URL
+        const response = await fetch(referenceAudioUrl);
+        const buffer = await response.arrayBuffer();
+        
+        // 2. Convert it into a 512-dimensional Tensor that SpeechT5 expects
+        const speaker_embeddings = new Tensor(
+            'float32',
+            new Float32Array(buffer),
+            [1, 512]
+        );
 
+        postMessage({ status: 'generation_progress', message: 'Synthesizing speech via WebGPU...', progress: 50 });
+        
+        // 3. Generate the audio
         const result = await synthesizer(text, {
-            speaker_audio: referenceAudio,
-            callback_function: (outputs) => {
-                // Fired token-by-token during inference
-                currentStep++;
-                
-                // Calculate pseudo-percentage. Cap at 95% until officially complete.
-                let percentage = Math.min(95, Math.round((currentStep / estimatedMaxSteps) * 100));
-                
-                postMessage({ 
-                    status: 'generation_progress', 
-                    message: `Synthesizing audio frame ${currentStep}...`,
-                    progress: percentage
-                });
-            }
+            speaker_embeddings: speaker_embeddings
         });
         
         postMessage({
