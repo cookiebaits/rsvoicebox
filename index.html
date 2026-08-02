@@ -3,25 +3,25 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Voicebox Clone (SpeechT5)</title>
+    <title>Ruinscams Voice Clone</title>
     <script src="https://cdn.tailwindcss.com"></script>
 </head>
 <body class="bg-gray-900 text-white min-h-screen font-sans flex flex-col items-center p-8">
     
     <main class="max-w-2xl w-full bg-gray-800 p-8 rounded-xl shadow-2xl">
-        <h1 class="text-3xl font-bold mb-2">Voicebox web</h1>
-        <p class="text-gray-400 mb-8">100% In-Browser Voice Cloning using SpeechT5 & WebGPU.</p>
+        <h1 class="text-3xl font-bold mb-2">Ruinscams Voice Clone</h1>
+        <p class="text-gray-400 mb-8">100% In-Browser Voice Cloning using Chatterbox & WebGPU.</p>
 
         <div class="mb-6 space-y-4">
             <h2 class="text-xl font-semibold">1. Choose a Voice</h2>
             
             <div class="bg-gray-700 p-4 rounded-lg">
-                <label class="block text-sm text-gray-300 mb-2">Select a pre-loaded speaker embedding:</label>
+                <label class="block text-sm text-gray-300 mb-2">Select a pre-loaded MP3 sample:</label>
                 <select id="sampleSelect" class="w-full bg-gray-600 text-white p-2 rounded-lg outline-none focus:ring-2 focus:ring-blue-500">
                     <option value="">-- Choose a sample --</option>
-                    <option value="samples/BushSample.bin">George W. Bush</option>
-                    <option value="samples/ObamaSample.bin">Barack Obama</option>
-                    <option value="samples/TrumpSample.bin">Donald Trump</option>
+                    <option value="samples/BushSample.mp3">George W. Bush</option>
+                    <option value="samples/ObamaSample.mp3">Barack Obama</option>
+                    <option value="samples/TrumpSample.mp3">Donald Trump</option>
                 </select>
             </div>
         </div>
@@ -30,7 +30,7 @@
             <h2 class="text-xl font-semibold mb-3">2. Generate Speech</h2>
             <textarea id="textInput" rows="4" 
                 class="w-full bg-gray-700 text-white p-4 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none resize-none mb-3"
-                placeholder="Type what you want to hear..."></textarea>
+                placeholder="Type what you want to hear... Try tags like [laugh] or [sigh]!"></textarea>
             
             <button id="generateBtn" disabled class="w-full bg-green-600 disabled:bg-gray-600 hover:bg-green-500 px-6 py-3 rounded-lg font-bold transition-colors">
                 Generate Speech (Waiting for Model...)
