@@ -1,9 +1,7 @@
 import { pipeline, env, Tensor } from 'https://cdn.jsdelivr.net/npm/@huggingface/transformers';
 
 env.allowLocalModels = false;
-
-// MAGIC FIX: Force bypass the browser cache so it stops loading a broken/corrupted model
-env.useBrowserCache = false; 
+env.useBrowserCache = false;
 
 let synthesizer = null;
 
@@ -31,8 +29,7 @@ async function loadModel() {
         
         postMessage({ status: 'ready' });
     } catch(err) {
-        // Detailed error to help if it happens again
-        postMessage({ status: 'error', message: `Network Error: ${err.message}. Ensure you are not testing locally via file://` });
+        postMessage({ status: 'error', message: `Model load error: ${err.message}` });
     }
 }
 
@@ -43,14 +40,34 @@ onmessage = async (e) => {
     const { text, referenceAudioUrl } = e.data;
     
     try {
-        postMessage({ status: 'generation_progress', message: 'Fetching speaker profile...', progress: 10 });
+        postMessage({ status: 'generation_progress', message: `Fetching speaker profile from ${referenceAudioUrl}...`, progress: 10 });
         
         const response = await fetch(referenceAudioUrl);
+        
+        // 1. Check if the file actually exists on the server
+        if (!response.ok) {
+            throw new Error(`Could not find voice file at '${referenceAudioUrl}' (HTTP Status ${response.status}). Make sure the .bin file is uploaded to GitHub.`);
+        }
+        
         const buffer = await response.arrayBuffer();
         
+        // 2. Validate byte alignment (SpeechT5 expects 512 float32 values = exactly 2048 bytes)
+        if (buffer.byteLength % 4 !== 0) {
+            throw new Error(`Invalid file format: File size (${buffer.byteLength} bytes) is not a multiple of 4.`);
+        }
+        
+        // 3. Ensure proper memory alignment
+        const float32Data = new Float32Array(
+            buffer.slice(0, buffer.byteLength - (buffer.byteLength % 4))
+        );
+
+        if (float32Data.length !== 512) {
+            throw new Error(`Invalid embedding size: Expected 512 elements, got ${float32Data.length}. Please re-generate the .bin file.`);
+        }
+
         const speaker_embeddings = new Tensor(
             'float32',
-            new Float32Array(buffer),
+            float32Data,
             [1, 512]
         );
 
