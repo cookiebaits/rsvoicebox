@@ -1,5 +1,3 @@
-const recordBtn = document.getElementById('recordBtn');
-const playRefBtn = document.getElementById('playRefBtn');
 const generateBtn = document.getElementById('generateBtn');
 const textInput = document.getElementById('textInput');
 const sampleSelect = document.getElementById('sampleSelect');
@@ -11,17 +9,13 @@ const executionProgressContainer = document.getElementById('executionProgressCon
 const executionProgressBar = document.getElementById('executionProgressBar');
 const executionProgressText = document.getElementById('executionProgressText');
 
-let mediaRecorder;
-let audioChunks = [];
-let referenceAudioFloat32 = null;
-let referenceAudioUrl = null;
 let isModelReady = false;
+let selectedAudioUrl = null;
 
 const worker = new Worker('worker.js', { type: 'module' });
 
-// Check if Generate button should be enabled
 function updateGenerateButton() {
-    if (isModelReady && referenceAudioFloat32 && textInput.value.trim().length > 0) {
+    if (isModelReady && selectedAudioUrl && textInput.value.trim().length > 0) {
         generateBtn.disabled = false;
         generateBtn.innerText = "Generate Speech";
     } else {
@@ -31,73 +25,12 @@ function updateGenerateButton() {
 
 textInput.addEventListener('input', updateGenerateButton);
 
-// Handle Sample Voice Selection
-sampleSelect.onchange = async (e) => {
-    const url = e.target.value;
-    if (!url) {
-        referenceAudioFloat32 = null;
-        updateGenerateButton();
-        return;
-    }
-    
-    statusText.innerText = "Loading sample voice...";
-    try {
-        const response = await fetch(url);
-        const arrayBuffer = await response.arrayBuffer();
-        
-        const audioCtx = new AudioContext({ sampleRate: 24000 });
-        const decodedData = await audioCtx.decodeAudioData(arrayBuffer);
-        
-        referenceAudioFloat32 = decodedData.getChannelData(0); 
-        statusText.innerText = "Sample voice loaded! Ready to generate.";
-        playRefBtn.disabled = true; 
-        updateGenerateButton();
-    } catch (err) {
-        statusText.innerText = "Error loading sample. Ensure the file exists.";
-    }
+// Dropdown simply saves the URL of the .bin file
+sampleSelect.onchange = (e) => {
+    selectedAudioUrl = e.target.value;
+    updateGenerateButton();
 };
 
-// Handle Microphone Recording
-recordBtn.onclick = async () => {
-    if (mediaRecorder && mediaRecorder.state === 'recording') {
-        mediaRecorder.stop();
-        recordBtn.innerText = 'Start Recording';
-        recordBtn.classList.replace('bg-red-600', 'bg-blue-600');
-    } else {
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        mediaRecorder = new MediaRecorder(stream);
-        
-        mediaRecorder.ondataavailable = e => audioChunks.push(e.data);
-        
-        mediaRecorder.onstop = async () => {
-            const blob = new Blob(audioChunks, { type: 'audio/webm' });
-            audioChunks = [];
-            referenceAudioUrl = URL.createObjectURL(blob);
-            
-            const arrayBuffer = await blob.arrayBuffer();
-            const audioCtx = new AudioContext({ sampleRate: 24000 });
-            const decodedData = await audioCtx.decodeAudioData(arrayBuffer);
-            
-            referenceAudioFloat32 = decodedData.getChannelData(0); 
-            
-            playRefBtn.disabled = false;
-            sampleSelect.value = ""; 
-            statusText.innerText = "Voice captured successfully! Ready to generate.";
-            updateGenerateButton();
-        };
-        
-        mediaRecorder.start();
-        recordBtn.innerText = 'Stop Recording';
-        recordBtn.classList.replace('bg-blue-600', 'bg-red-600');
-    }
-};
-
-playRefBtn.onclick = () => {
-    const audio = new Audio(referenceAudioUrl);
-    audio.play();
-};
-
-// Handle Worker Messages
 worker.onmessage = (e) => {
     const { status, message, audio, sampleRate, progress } = e.data;
     
@@ -106,12 +39,8 @@ worker.onmessage = (e) => {
         progressContainer.classList.remove('hidden');
         progressBar.style.width = `${progress}%`;
     } 
-    else if (status === 'compiling') {
-        progressContainer.classList.add('hidden');
-        statusText.innerText = message;
-        generateBtn.innerText = "Optimizing Shaders...";
-    }
     else if (status === 'ready') {
+        progressContainer.classList.add('hidden');
         isModelReady = true;
         statusText.innerText = "Model loaded and cached. Ready for cloning.";
         updateGenerateButton();
@@ -145,10 +74,9 @@ worker.onmessage = (e) => {
     }
 };
 
-// Send task to worker
 generateBtn.onclick = () => {
     const text = textInput.value.trim();
-    if (!text || !referenceAudioFloat32) return;
+    if (!text || !selectedAudioUrl) return;
     
     generateBtn.disabled = true;
     generateBtn.innerText = "Generating...";
@@ -160,7 +88,7 @@ generateBtn.onclick = () => {
     
     worker.postMessage({
         text,
-        referenceAudio: referenceAudioFloat32
+        referenceAudioUrl: selectedAudioUrl
     });
 };
 
