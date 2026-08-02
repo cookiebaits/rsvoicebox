@@ -1,7 +1,9 @@
 import { pipeline, env, Tensor } from 'https://cdn.jsdelivr.net/npm/@huggingface/transformers';
 
 env.allowLocalModels = false;
-env.use_cache = true; 
+
+// MAGIC FIX: Force bypass the browser cache so it stops loading a broken/corrupted model
+env.useBrowserCache = false; 
 
 let synthesizer = null;
 
@@ -13,7 +15,6 @@ async function loadModel() {
     });
     
     try {
-        // Switching to the officially supported WebGPU TTS model
         synthesizer = await pipeline('text-to-speech', 'Xenova/speecht5_tts', {
             device: 'webgpu',
             dtype: 'fp32', 
@@ -30,7 +31,8 @@ async function loadModel() {
         
         postMessage({ status: 'ready' });
     } catch(err) {
-        postMessage({ status: 'error', message: `Error loading model: ${err.message}` });
+        // Detailed error to help if it happens again
+        postMessage({ status: 'error', message: `Network Error: ${err.message}. Ensure you are not testing locally via file://` });
     }
 }
 
@@ -43,11 +45,9 @@ onmessage = async (e) => {
     try {
         postMessage({ status: 'generation_progress', message: 'Fetching speaker profile...', progress: 10 });
         
-        // 1. Fetch the .bin file from the URL
         const response = await fetch(referenceAudioUrl);
         const buffer = await response.arrayBuffer();
         
-        // 2. Convert it into a 512-dimensional Tensor that SpeechT5 expects
         const speaker_embeddings = new Tensor(
             'float32',
             new Float32Array(buffer),
@@ -56,7 +56,6 @@ onmessage = async (e) => {
 
         postMessage({ status: 'generation_progress', message: 'Synthesizing speech via WebGPU...', progress: 50 });
         
-        // 3. Generate the audio
         const result = await synthesizer(text, {
             speaker_embeddings: speaker_embeddings
         });
