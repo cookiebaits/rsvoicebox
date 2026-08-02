@@ -1,31 +1,41 @@
-import { pipeline, env, Tensor } from 'https://cdn.jsdelivr.net/npm/@huggingface/transformers';
+import { pipeline, env } from 'https://cdn.jsdelivr.net/npm/@huggingface/transformers';
 
 env.allowLocalModels = false;
-env.useBrowserCache = false;
+env.useBrowserCache = true;
 
 let synthesizer = null;
 
 async function loadModel() {
     postMessage({ 
         status: 'download_progress', 
-        message: 'Initializing SpeechT5 WebGPU model...',
+        message: 'Initializing Chatterbox WebGPU model...',
         progress: 0
     });
     
     try {
-        synthesizer = await pipeline('text-to-speech', 'Xenova/speecht5_tts', {
+        // We use the 'onnx-community' repo which has the correct browser-ready files
+        synthesizer = await pipeline('text-to-speech', 'onnx-community/chatterbox-ONNX', {
             device: 'webgpu',
-            dtype: 'fp32', 
+            dtype: 'fp16', // Forces High-Speed WebGPU processing
             progress_callback: (info) => {
                 if (info.status === 'progress') {
                     postMessage({ 
                         status: 'download_progress', 
-                        message: `Downloading SpeechT5 Model: ${Math.round(info.progress)}%`,
+                        message: `Downloading Chatterbox Model: ${Math.round(info.progress)}%`,
                         progress: info.progress
                     });
                 }
             }
         });
+        
+        // --- THE WARM-UP PHASE ---
+        postMessage({ 
+            status: 'compiling', 
+            message: 'Optimizing and compiling WebGPU Shaders (Takes 15-30 seconds on first run)...' 
+        });
+        
+        const dummyAudio = new Float32Array(24000); 
+        await synthesizer("a", { speaker_audio: dummyAudio }); // Silent compile trigger
         
         postMessage({ status: 'ready' });
     } catch(err) {
@@ -37,44 +47,26 @@ loadModel();
 
 onmessage = async (e) => {
     if (!synthesizer) return;
-    const { text, referenceAudioUrl } = e.data;
+    const { text, referenceAudio } = e.data;
     
     try {
-        postMessage({ status: 'generation_progress', message: `Fetching speaker profile from ${referenceAudioUrl}...`, progress: 10 });
+        postMessage({ status: 'generation_progress', message: 'Starting voice clone...', progress: 10 });
         
-        const response = await fetch(referenceAudioUrl);
-        
-        // 1. Check if the file actually exists on the server
-        if (!response.ok) {
-            throw new Error(`Could not find voice file at '${referenceAudioUrl}' (HTTP Status ${response.status}). Make sure the .bin file is uploaded to GitHub.`);
-        }
-        
-        const buffer = await response.arrayBuffer();
-        
-        // 2. Validate byte alignment (SpeechT5 expects 512 float32 values = exactly 2048 bytes)
-        if (buffer.byteLength % 4 !== 0) {
-            throw new Error(`Invalid file format: File size (${buffer.byteLength} bytes) is not a multiple of 4.`);
-        }
-        
-        // 3. Ensure proper memory alignment
-        const float32Data = new Float32Array(
-            buffer.slice(0, buffer.byteLength - (buffer.byteLength % 4))
-        );
+        const estimatedMaxSteps = Math.max(10, Math.floor(text.length * 1.5));
+        let currentStep = 0;
 
-        if (float32Data.length !== 512) {
-            throw new Error(`Invalid embedding size: Expected 512 elements, got ${float32Data.length}. Please re-generate the .bin file.`);
-        }
-
-        const speaker_embeddings = new Tensor(
-            'float32',
-            float32Data,
-            [1, 512]
-        );
-
-        postMessage({ status: 'generation_progress', message: 'Synthesizing speech via WebGPU...', progress: 50 });
-        
         const result = await synthesizer(text, {
-            speaker_embeddings: speaker_embeddings
+            speaker_audio: referenceAudio, // Feeds the raw MP3 data we decoded in app.js straight to the model
+            callback_function: (outputs) => {
+                currentStep++;
+                let percentage = Math.min(95, Math.round((currentStep / estimatedMaxSteps) * 100));
+                
+                postMessage({ 
+                    status: 'generation_progress', 
+                    message: `Synthesizing audio frame ${currentStep}...`,
+                    progress: percentage
+                });
+            }
         });
         
         postMessage({
