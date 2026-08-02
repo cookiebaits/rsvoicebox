@@ -1,72 +1,62 @@
-import { pipeline, env, Tensor } from 'https://cdn.jsdelivr.net/npm/@huggingface/transformers';
-
-env.allowLocalModels = false;
-env.use_cache = true; 
-
-let synthesizer = null;
-
-async function loadModel() {
-    postMessage({ 
-        status: 'download_progress', 
-        message: 'Initializing SpeechT5 WebGPU model...',
-        progress: 0
-    });
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Voicebox Clone (SpeechT5)</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-900 text-white min-h-screen font-sans flex flex-col items-center p-8">
     
-    try {
-        // Switching to the officially supported WebGPU TTS model
-        synthesizer = await pipeline('text-to-speech', 'Xenova/speecht5_tts', {
-            device: 'webgpu',
-            dtype: 'fp32', 
-            progress_callback: (info) => {
-                if (info.status === 'progress') {
-                    postMessage({ 
-                        status: 'download_progress', 
-                        message: `Downloading SpeechT5 Model: ${Math.round(info.progress)}%`,
-                        progress: info.progress
-                    });
-                }
-            }
-        });
-        
-        postMessage({ status: 'ready' });
-    } catch(err) {
-        postMessage({ status: 'error', message: `Error loading model: ${err.message}` });
-    }
-}
+    <main class="max-w-2xl w-full bg-gray-800 p-8 rounded-xl shadow-2xl">
+        <h1 class="text-3xl font-bold mb-2">Voicebox web</h1>
+        <p class="text-gray-400 mb-8">100% In-Browser Voice Cloning using SpeechT5 & WebGPU.</p>
 
-loadModel();
+        <div class="mb-6 space-y-4">
+            <h2 class="text-xl font-semibold">1. Choose a Voice</h2>
+            
+            <div class="bg-gray-700 p-4 rounded-lg">
+                <label class="block text-sm text-gray-300 mb-2">Select a pre-loaded speaker embedding:</label>
+                <select id="sampleSelect" class="w-full bg-gray-600 text-white p-2 rounded-lg outline-none focus:ring-2 focus:ring-blue-500">
+                    <option value="">-- Choose a sample --</option>
+                    <!-- A default voice provided by Hugging Face to test with -->
+                    <option value="https://huggingface.co/datasets/Xenova/transformers.js-docs/resolve/main/speaker_embeddings.bin">Generic Test Voice</option>
+                    <!-- Your custom converted files -->
+                    <option value="samples/BushSample.bin">George W. Bush</option>
+                    <option value="samples/ObamaSample.bin">Barack Obama</option>
+                    <option value="samples/TrumpSample.bin">Donald Trump</option>
+                </select>
+            </div>
+        </div>
 
-onmessage = async (e) => {
-    if (!synthesizer) return;
-    const { text, referenceAudioUrl } = e.data;
-    
-    try {
-        postMessage({ status: 'generation_progress', message: 'Fetching speaker profile...', progress: 10 });
-        
-        // 1. Fetch the .bin file from the URL
-        const response = await fetch(referenceAudioUrl);
-        const buffer = await response.arrayBuffer();
-        
-        // 2. Convert it into a 512-dimensional Tensor that SpeechT5 expects
-        const speaker_embeddings = new Tensor(
-            'float32',
-            new Float32Array(buffer),
-            [1, 512]
-        );
+        <div class="mb-6">
+            <h2 class="text-xl font-semibold mb-3">2. Generate Speech</h2>
+            <textarea id="textInput" rows="4" 
+                class="w-full bg-gray-700 text-white p-4 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none resize-none mb-3"
+                placeholder="Type what you want to hear..."></textarea>
+            
+            <button id="generateBtn" disabled class="w-full bg-green-600 disabled:bg-gray-600 hover:bg-green-500 px-6 py-3 rounded-lg font-bold transition-colors">
+                Generate Speech (Waiting for Model...)
+            </button>
+        </div>
 
-        postMessage({ status: 'generation_progress', message: 'Synthesizing speech via WebGPU...', progress: 50 });
-        
-        // 3. Generate the audio
-        const result = await synthesizer(text, {
-            speaker_embeddings: speaker_embeddings
-        });
-        
-        postMessage({
-            status: 'complete',
-            audio: result.audio,
-            sampleRate: result.sampling_rate
-        });
-    } catch (err) {
-        postMessage({ status: 'error', message: err.message });
-    }
-};
+        <div class="border-t border-gray-700 pt-6">
+            <h3 class="text-sm font-bold text-gray-400 mb-1 uppercase tracking-wider">System Status</h3>
+            <p id="status" class="text-sm text-blue-400 mb-4 font-mono">Initializing Web Worker...</p>
+            
+            <div id="progressContainer" class="hidden w-full bg-gray-700 rounded-full h-2 mb-4">
+                <div id="progressBar" class="bg-blue-500 h-2 rounded-full transition-all duration-300" style="width: 0%"></div>
+            </div>
+
+            <div id="executionProgressContainer" class="hidden w-full bg-gray-700 rounded-full h-6 mb-4 relative overflow-hidden shadow-inner">
+                <div id="executionProgressBar" class="bg-green-500 h-6 rounded-full transition-all duration-200 ease-out" style="width: 0%"></div>
+                <span id="executionProgressText" class="absolute inset-0 flex items-center justify-center text-xs font-bold text-white drop-shadow-md">0%</span>
+            </div>
+
+            <audio id="outputAudio" controls class="w-full hidden mt-4"></audio>
+        </div>
+    </main>
+
+    <script type="module" src="app.js"></script>
+</body>
+</html>
