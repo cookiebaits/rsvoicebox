@@ -14,48 +14,59 @@ let referenceAudioFloat32 = null;
 
 const worker = new Worker('worker.js', { type: 'module' });
 
-function updateGenerateButton() {
-    if (isModelReady && referenceAudioFloat32 && textInput.value.trim().length > 0) {
+// Dynamic state manager so the button always reflects true app readiness
+function updateUIState() {
+    const hasText = textInput.value.trim().length > 0;
+    const hasVoice = referenceAudioFloat32 !== null;
+
+    if (!isModelReady) {
+        generateBtn.disabled = true;
+        generateBtn.innerText = "Generate Speech (Waiting for AI Model...)";
+    } else if (!hasVoice) {
+        generateBtn.disabled = true;
+        generateBtn.innerText = "Please Select a Voice Sample";
+    } else if (!hasText) {
+        generateBtn.disabled = true;
+        generateBtn.innerText = "Please Enter Text to Generate";
+    } else {
         generateBtn.disabled = false;
         generateBtn.innerText = "Generate Speech";
-    } else {
-        generateBtn.disabled = true;
+        generateBtn.className = "w-full bg-green-600 hover:bg-green-500 px-6 py-3 rounded-lg font-bold transition-colors cursor-pointer";
     }
 }
 
-textInput.addEventListener('input', updateGenerateButton);
+textInput.addEventListener('input', updateUIState);
 
-// Decode the MP3 directly in the browser!
+// Load and decode the MP3 sample
 sampleSelect.onchange = async (e) => {
     const url = e.target.value;
     if (!url) {
         referenceAudioFloat32 = null;
-        updateGenerateButton();
+        updateUIState();
         return;
     }
     
     statusText.innerText = "Loading MP3 voice sample...";
-    generateBtn.disabled = true;
 
     try {
         const response = await fetch(url);
         if (!response.ok) throw new Error(`HTTP ${response.status}: Could not find ${url}`);
         
         const arrayBuffer = await response.arrayBuffer();
-        
-        // Chatterbox expects audio processed at exactly 24kHz
         const audioCtx = new AudioContext({ sampleRate: 24000 });
         const decodedData = await audioCtx.decodeAudioData(arrayBuffer);
         
-        // Extract the raw audio floats
         referenceAudioFloat32 = decodedData.getChannelData(0); 
-        statusText.innerText = "MP3 loaded successfully! Ready to clone.";
-        updateGenerateButton();
+        statusText.innerText = "MP3 voice sample loaded successfully!";
+        updateUIState();
     } catch (err) {
-        statusText.innerText = `Error: ${err.message}. Make sure your .mp3 is uploaded to the samples folder.`;
+        statusText.innerText = `Error loading sample: ${err.message}`;
+        referenceAudioFloat32 = null;
+        updateUIState();
     }
 };
 
+// Handle messages from the Web Worker
 worker.onmessage = (e) => {
     const { status, message, audio, sampleRate, progress } = e.data;
     
@@ -67,12 +78,12 @@ worker.onmessage = (e) => {
     else if (status === 'compiling') {
         progressContainer.classList.add('hidden');
         statusText.innerText = message;
-        generateBtn.innerText = "Optimizing Shaders...";
     }
     else if (status === 'ready') {
         isModelReady = true;
-        statusText.innerText = "Model loaded. Ready for voice cloning.";
-        updateGenerateButton();
+        progressContainer.classList.add('hidden');
+        statusText.innerText = "AI Model loaded and ready!";
+        updateUIState();
     } 
     else if (status === 'generation_progress') {
         statusText.innerText = message;
@@ -94,18 +105,19 @@ worker.onmessage = (e) => {
         outputAudio.style.display = 'block';
         outputAudio.play();
         
-        updateGenerateButton();
+        updateUIState();
     }
     else if (status === 'error') {
         statusText.innerText = `Error: ${message}`;
         executionProgressContainer.classList.add('hidden');
-        updateGenerateButton();
+        updateUIState();
     }
 };
 
+// Trigger generation
 generateBtn.onclick = () => {
     const text = textInput.value.trim();
-    if (!text || !referenceAudioFloat32) return;
+    if (!text || !referenceAudioFloat32 || !isModelReady) return;
     
     generateBtn.disabled = true;
     generateBtn.innerText = "Generating...";
@@ -117,11 +129,10 @@ generateBtn.onclick = () => {
     
     worker.postMessage({
         text,
-        referenceAudio: referenceAudioFloat32 // Pass the raw MP3 array straight to the AI
+        referenceAudio: referenceAudioFloat32
     });
 };
 
-// Utility function to convert raw PCM Float32Array to WAV format
 function encodeWAV(samples, sampleRate) {
     const buffer = new ArrayBuffer(44 + samples.length * 2);
     const view = new DataView(buffer);
