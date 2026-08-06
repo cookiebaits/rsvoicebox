@@ -1,0 +1,6 @@
+{
+  "name": "Chatterbox Turbo Voice Studio",
+  "description": "Custom voice cloning, audio synthesis dashboard, model manager, and deployment suite.",
+  "requestFramePermissions": ["microphone"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
